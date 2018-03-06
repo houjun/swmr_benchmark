@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
+#include <string.h>
 
 #include "mpi.h"
 #include "hdf5.h"
@@ -107,8 +108,7 @@ int main(int argc, char *argv[])
 
         // Generate new data 
         i = 0;
-        for (j = 0; j < write_size; j++) 
-            data[j] = 'a' + i;
+        memset(data, 'a' + i, write_size);
 
         if (delay > 0) 
             sleep(delay);
@@ -137,8 +137,7 @@ int main(int argc, char *argv[])
                 sleep(delay);
 
             // Generate new data 
-            for (j = 0; j < write_size; j++) 
-                data[j] = 'a' + i;
+            memset(data, 'a' + i, write_size);
 
             // Extend dataset
             new_dims[0] += write_size;
@@ -217,21 +216,25 @@ int main(int argc, char *argv[])
 
             // Verify
             varified = 1;
-            for (j = 0; j < count[0]; j++, i++) 
-                if (data[j] != 'a' + (i / write_size)) {
-                    printf("Reader #%d: Error with read data, data[%u] = '%u'.\n", 
-                            rank, (unsigned)j, (unsigned)data[j]);
+            for (j = 0; j < count[0]; j++) { 
+                if (j > 0 && j % write_size == 0) 
+                    i++;
+                if (data[j] != 'a' + i ) {
+                    printf("Reader #%d: Error with read data, data[%u] = '%u' (%d).\n", 
+                            rank, (unsigned)j, (unsigned)data[j], 'a' + i );
                     varified = 0;
                     break;
                 }
+            }
 
             if (varified == 1) 
                 printf("Reader #%d: Iter %d - Successfully read data %.2f MB.\n", 
-                        rank, (int)(i/write_size), count[0] / 1048576.0);
+                        rank, i, count[0] / 1048576.0);
             fflush(stdout);
             
             // Record the current dims for next read
             dims[0] = new_dims[0];
+            i++;
         } // end while
 
 

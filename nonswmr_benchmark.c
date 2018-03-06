@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
+#include <string.h>
 
 #include "mpi.h"
 #include "hdf5.h"
@@ -105,8 +106,7 @@ int main(int argc, char *argv[])
                 sleep(delay);
 
             // Generate new data 
-            for (j = 0; j < write_size; j++) 
-                data[j] = 'a' + i;
+            memset(data, 'a' + i, write_size);
 
             // Send "flush coming" signal to all readers
             send_msg = FLUSH_COMING;
