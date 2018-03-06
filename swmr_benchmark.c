@@ -12,19 +12,19 @@
 
 void print_usage(const char *exename)
 {
-    printf("Usage: ./%s write_size n_writes filepath(optional)\n", exename);
+    printf("Usage: ./%s write_size(MB) n_writes filepath(optional)\n", exename);
 }
 
 int main(int argc, char *argv[])
 {
     int rank, size, i, j, varified;
-    int amount_read, total_written;
+    hsize_t amount_read, total_written;
     int n_writes = 0;
     char *data;
     int  *gather_msg;
     char *filepath = NULL;
     char filename[128] = {0};
-    hsize_t write_size = 0;
+    hsize_t write_size = 0, data_alloc;
     herr_t   status;
     hid_t    file_id, dset_id, fspace_id, dspace_id, plist, fapl;
     hsize_t dims[NDIM], new_dims[NDIM], chk_dims[NDIM], maxdims[NDIM], start[NDIM], count[NDIM];
@@ -49,6 +49,7 @@ int main(int argc, char *argv[])
     }
 
     write_size = (hsize_t)atoi(argv[1]);
+    write_size *= 1048576;
     n_writes   = atoi(argv[2]);
     total_written = write_size * n_writes;
 
@@ -72,6 +73,7 @@ int main(int argc, char *argv[])
     }
 
     data       = (char*)malloc(write_size);
+    data_alloc = write_size;
 
     gather_msg = (int*)malloc(size*sizeof(int));
 
@@ -83,8 +85,6 @@ int main(int argc, char *argv[])
 
     // Rank 0 is the writer, others are readers
     if (rank == 0) {
-
-
         fapl = H5Pcreate (H5P_FILE_ACCESS);
         H5Pset_libver_bounds(fapl, H5F_LIBVER_LATEST, H5F_LIBVER_LATEST);
 
@@ -122,12 +122,10 @@ int main(int argc, char *argv[])
 
         // Write data
         status = H5Dwrite(dset_id, H5T_NATIVE_CHAR, dspace_id, fspace_id, H5P_DEFAULT, data);
-        if (status < 0) {
+        if (status < 0) 
             printf("Error writing dataset!\n");
-        }
-
+        
         status = H5Sclose(fspace_id);
-
         // Flush
         status = H5Fflush(file_id, H5F_SCOPE_GLOBAL);
 
@@ -137,15 +135,10 @@ int main(int argc, char *argv[])
             // Do something
             if (delay > 0) 
                 sleep(delay);
-            
 
             // Generate new data 
             for (j = 0; j < write_size; j++) 
                 data[j] = 'a' + i;
-
-
-            // Use H5DOappend?
-            /* H5DOappend(dset_id, H5P_DEFAULT, 0, write_size, H5T_NATIVE_CHAR, data) */
 
             // Extend dataset
             new_dims[0] += write_size;
@@ -159,28 +152,24 @@ int main(int argc, char *argv[])
 
             write_time_start = MPI_Wtime();
             status = H5Dwrite(dset_id, H5T_NATIVE_CHAR, dspace_id, fspace_id, H5P_DEFAULT, data);
+            if (status < 0) 
+                printf("Error appending dataset!\n");
             write_time_end = MPI_Wtime();
             write_time += write_time_end - write_time_start;
-            if (status < 0) {
-                printf("Error appending dataset!\n");
-            }
 
             status = H5Sclose(fspace_id);
        
             // Flush
-            status = H5Dflush(dset_id);
+            status = H5Fflush(file_id, H5F_SCOPE_GLOBAL);
 
         } // end for n_writes
-H5Dclose(dset_id);
 
+        status = H5Dclose(dset_id);
         status = H5Sclose(dspace_id);
-
-H5Fclose(file_id);
-// MPI_Barrier(MPI_COMM_WORLD); /* B */
+        status = H5Fclose(file_id);
     }
     else {
         MPI_Barrier(MPI_COMM_WORLD); /* A */
-// MPI_Barrier(MPI_COMM_WORLD); /* B */
         // I am reader
         dims[0] = 0;
 
@@ -211,11 +200,12 @@ H5Fclose(file_id);
             // Select new data
             start[0]  = dims[0];
             count[0]  = new_dims[0] - dims[0];
-/* HDfprintf(stderr, "count = {%Hu}\n", count[0]); */
             status = H5Sselect_hyperslab(fspace_id, H5S_SELECT_SET, start, NULL, count, NULL);
 
             dspace_id = H5Screate_simple (NDIM, count, NULL); 
-            data = realloc(data, count[0]);
+
+            if (count[0] > data_alloc) 
+                data = realloc(data, count[0]);
 
             // Read 
             read_time_start = MPI_Wtime();
@@ -245,8 +235,8 @@ H5Fclose(file_id);
         } // end while
 
 
-H5Dclose(dset_id);
-H5Fclose(file_id);
+        H5Dclose(dset_id);
+        H5Fclose(file_id);
 
     } // end else
 

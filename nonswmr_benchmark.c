@@ -16,7 +16,7 @@
 
 void print_usage(const char *exename)
 {
-    printf("Usage: ./%s write_size n_writes filepath(optional)\n", exename);
+    printf("Usage: ./%s write_size(MB) n_writes filepath(optional)\n", exename);
 }
 
 int main(int argc, char *argv[])
@@ -53,6 +53,7 @@ int main(int argc, char *argv[])
     }
 
     write_size = (hsize_t)atoi(argv[1]);
+    write_size *= 1048576;
     n_writes   = atoi(argv[2]);
 
     dims[0]    = write_size;
