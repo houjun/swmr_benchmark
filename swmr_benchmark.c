@@ -13,16 +13,15 @@
 
 void print_usage(const char *exename)
 {
-    printf("Usage: ./%s write_size(MB) n_writes filepath(optional)\n", exename);
+    printf("Usage: ./%s write_size(Bytes) n_writes filepath(optional)\n", exename);
 }
 
 int main(int argc, char *argv[])
 {
-    int rank, size, i, j, varified;
+    int rank, size, i, j, varified, iter;
     hsize_t amount_read, total_written;
     int n_writes = 0;
     char *data;
-    int  *gather_msg;
     char *filepath = NULL;
     char filename[128] = {0};
     hsize_t write_size = 0, data_alloc;
@@ -49,8 +48,8 @@ int main(int argc, char *argv[])
         sprintf(filename, "%s/%s", filepath, FILENAME);
     }
 
-    write_size = (hsize_t)atoi(argv[1]);
-    write_size *= 1048576;
+    write_size = (hsize_t)atol(argv[1]);
+    /* write_size *= 1048576; */
     n_writes   = atoi(argv[2]);
     total_written = write_size * n_writes;
 
@@ -76,8 +75,6 @@ int main(int argc, char *argv[])
     data       = (char*)malloc(write_size);
     data_alloc = write_size;
 
-    gather_msg = (int*)malloc(size*sizeof(int));
-
     if (rank == 0) 
         printf("Writing to %s\n", filename);
 
@@ -89,6 +86,7 @@ int main(int argc, char *argv[])
         fapl = H5Pcreate (H5P_FILE_ACCESS);
         H5Pset_libver_bounds(fapl, H5F_LIBVER_LATEST, H5F_LIBVER_LATEST);
 
+        write_time_start = MPI_Wtime();
         // Create a file
         file_id = H5Fcreate(filename, H5F_ACC_TRUNC|H5F_ACC_SWMR_WRITE, H5P_DEFAULT, fapl);
         if (file_id < 0) {
@@ -129,6 +127,12 @@ int main(int argc, char *argv[])
         // Flush
         status = H5Fflush(file_id, H5F_SCOPE_GLOBAL);
 
+        write_time_end = MPI_Wtime();
+        write_time = write_time_end - write_time_start;
+
+        printf("Iter  0       - Rank %d: write time: %.4f\n", rank, write_time);
+        fflush(stdout);
+
         MPI_Barrier(MPI_COMM_WORLD); /* A */
 
         for (i = 1; i < n_writes; i++) {
@@ -153,13 +157,16 @@ int main(int argc, char *argv[])
             status = H5Dwrite(dset_id, H5T_NATIVE_CHAR, dspace_id, fspace_id, H5P_DEFAULT, data);
             if (status < 0) 
                 printf("Error appending dataset!\n");
-            write_time_end = MPI_Wtime();
-            write_time += write_time_end - write_time_start;
 
             status = H5Sclose(fspace_id);
        
             // Flush
             status = H5Fflush(file_id, H5F_SCOPE_GLOBAL);
+
+            write_time_end = MPI_Wtime();
+            printf("Iter %2d       - Rank %d: write time: %.4f\n", i, rank, write_time_end - write_time_start);
+            fflush(stdout);
+            write_time += write_time_end - write_time_start;
 
         } // end for n_writes
 
@@ -203,38 +210,45 @@ int main(int argc, char *argv[])
 
             dspace_id = H5Screate_simple (NDIM, count, NULL); 
 
-            if (count[0] > data_alloc) 
+            if (count[0] > data_alloc) {
                 data = realloc(data, count[0]);
+                data_alloc = count[0];
+            }
 
             // Read 
             read_time_start = MPI_Wtime();
             status = H5Dread (dset_id, H5T_NATIVE_CHAR, dspace_id, fspace_id, H5P_DEFAULT, data);
             read_time_end = MPI_Wtime();
-            read_time = read_time_end - read_time_start;
+
+            printf("Iter %2d to %2d - Rank %d: read  time: %.4f\n", 
+                        i, (int)(i+count[0]/write_size-1), rank, read_time_end - read_time_start);
+            fflush(stdout);
+            read_time += read_time_end - read_time_start;
 
             amount_read += count[0];
 
-            // Verify
-            varified = 1;
-            for (j = 0; j < count[0]; j++) { 
-                if (j > 0 && j % write_size == 0) 
-                    i++;
-                if (data[j] != 'a' + i ) {
-                    printf("Reader #%d: Error with read data, data[%u] = '%u' (%d).\n", 
-                            rank, (unsigned)j, (unsigned)data[j], 'a' + i );
-                    varified = 0;
-                    break;
-                }
-            }
+            /* // Verify */
+            /* varified = 1; */
+            /* iter = i; */
+            /* for (j = 0; j < count[0]; j++) { */ 
+            /*     if (j > 0 && j % write_size == 0) */ 
+            /*         iter++; */
+            /*     if (data[j] != 'a' + iter ) { */
+            /*         printf("Reader #%d: Error with read data, data[%u] = '%u' (%d).\n", */ 
+            /*                 rank, (unsigned)j, (unsigned)data[j], 'a' + iter ); */
+            /*         varified = 0; */
+            /*         break; */
+            /*     } */
+            /* } */
 
-            if (varified == 1) 
-                printf("Reader #%d: Iter %d - Successfully read data %.2f MB.\n", 
-                        rank, i, count[0] / 1048576.0);
-            fflush(stdout);
+            /* if (varified == 1) */ 
+            /*     printf("Reader #%d: Iter %d - Successfully read data %.4f MB.\n", */ 
+            /*             rank, iter, count[0] / 1048576.0); */
+            /* fflush(stdout); */
             
             // Record the current dims for next read
             dims[0] = new_dims[0];
-            i++;
+            i += count[0]/write_size;
         } // end while
 
 
@@ -244,22 +258,21 @@ int main(int argc, char *argv[])
     } // end else
 
 
-    MPI_Barrier(MPI_COMM_WORLD); /* C */
+    MPI_Barrier(MPI_COMM_WORLD); 
     total_time_end = MPI_Wtime();
     total_time = total_time_end - total_time_start;
 
     if (rank == 0) 
-        printf("Rank %d: Total time:%.2f, write total time: %.2f\n", rank, total_time, write_time);
+        printf("Rank %d: Total time:%.4f, write total time: %.4f\n", rank, total_time, write_time);
     fflush(stdout);
 
     MPI_Barrier(MPI_COMM_WORLD);
 
     if (rank != 0) 
-        printf("Rank %d: Total time:%.2f, read  total time: %.2f\n", rank, total_time, read_time);
+        printf("Rank %d: Total time:%.4f, read  total time: %.4f\n", rank, total_time, read_time);
 
 done:
     free(data);
-    free(gather_msg);
 
 exit:
     MPI_Finalize();

@@ -17,7 +17,7 @@
 
 void print_usage(const char *exename)
 {
-    printf("Usage: ./%s write_size(MB) n_writes filepath(optional)\n", exename);
+    printf("Usage: ./%s write_size(Bytes) n_writes filepath(optional)\n", exename);
 }
 
 int main(int argc, char *argv[])
@@ -33,7 +33,7 @@ int main(int argc, char *argv[])
     herr_t   status;
     hid_t    file_id, dset_id, fspace_id, dspace_id, plist;
     hsize_t dims[NDIM], new_dims[NDIM], chk_dims[NDIM], maxdims[NDIM], start[NDIM], count[NDIM];
-    double total_time = 0.0, write_time = 0.0, read_time = 0.0, comm_time = 0.0;
+    double total_time = 0.0, write_time = 0.0, read_time = 0.0, comm_time = 0.0, iter_comm_time = 0.0;
     double total_time_start, write_time_start, read_time_start, comm_time_start;
     double total_time_end, write_time_end, read_time_end, comm_time_end;
 
@@ -53,8 +53,8 @@ int main(int argc, char *argv[])
         sprintf(filename, "%s/%s", filepath, FILENAME);
     }
 
-    write_size = (hsize_t)atoi(argv[1]);
-    write_size *= 1048576;
+    write_size = (hsize_t)atol(argv[1]);
+    /* write_size *= 1048576; */
     n_writes   = atoi(argv[2]);
 
     dims[0]    = write_size;
@@ -113,14 +113,16 @@ int main(int argc, char *argv[])
             comm_time_start = MPI_Wtime();
             MPI_Bcast(&send_msg, 1, MPI_INT, 0, MPI_COMM_WORLD);
             comm_time_end = MPI_Wtime();
-            comm_time += comm_time_end - comm_time_start;
+            iter_comm_time = comm_time_end - comm_time_start;
+            comm_time     += comm_time_end - comm_time_start;
 
             // Confirms all readers have closed file
             send_msg = FILE_CLOSED;
             comm_time_start = MPI_Wtime();
             MPI_Gather(&send_msg, 1, MPI_INT, gather_msg, 1, MPI_INT, 0, MPI_COMM_WORLD);
             comm_time_end = MPI_Wtime();
-            comm_time += comm_time_end - comm_time_start;
+            iter_comm_time += comm_time_end - comm_time_start;
+            comm_time      += comm_time_end - comm_time_start;
             for (j = 1; j < size; j++) {
                 if (gather_msg[j] != FILE_CLOSED) {
                     printf("Error receiving comfirm message from readers!\n");
@@ -198,8 +200,12 @@ int main(int argc, char *argv[])
             comm_time_start = MPI_Wtime();
             MPI_Bcast(&send_msg, 1, MPI_INT, 0, MPI_COMM_WORLD);
             comm_time_end = MPI_Wtime();
-            comm_time += comm_time_end - comm_time_start;
+            iter_comm_time += comm_time_end - comm_time_start;
+            comm_time      += comm_time_end - comm_time_start;
 
+            printf("Iter %2d - Rank %d: comm time: %.4f, write time: %.4f\n", 
+                    i, rank, iter_comm_time, write_time);
+            fflush(stdout);
         } // end for n_writes
 
     }
@@ -213,7 +219,8 @@ int main(int argc, char *argv[])
             comm_time_start = MPI_Wtime();
             MPI_Bcast(&recv_msg, 1, MPI_INT, 0, MPI_COMM_WORLD);
             comm_time_end = MPI_Wtime();
-            comm_time += comm_time_end - comm_time_start;
+            iter_comm_time = comm_time_end - comm_time_start;
+            comm_time     += comm_time_end - comm_time_start;
             if (recv_msg == FLUSH_COMING) {
                 send_msg = FILE_CLOSED;
                 if (i != 0) {
@@ -232,14 +239,16 @@ int main(int argc, char *argv[])
                 comm_time_start = MPI_Wtime();
                 MPI_Gather(&send_msg, 1, MPI_INT, gather_msg, 1, MPI_INT, 0, MPI_COMM_WORLD);
                 comm_time_end = MPI_Wtime();
-                comm_time += comm_time_end - comm_time_start;
+                iter_comm_time += comm_time_end - comm_time_start;
+                comm_time      += comm_time_end - comm_time_start;
             }
 
             // Recieves "OK to reopen" signal from writer
             comm_time_start = MPI_Wtime();
             MPI_Bcast(&recv_msg, 1, MPI_INT, 0, MPI_COMM_WORLD);
             comm_time_end = MPI_Wtime();
-            comm_time += comm_time_end - comm_time_start;
+            iter_comm_time += comm_time_end - comm_time_start;
+            comm_time      += comm_time_end - comm_time_start;
             if (recv_msg == OK_TO_OPEN) {
                 // Open file
                 file_id   = H5Fopen(filename, H5F_ACC_RDONLY, H5P_DEFAULT);
@@ -265,24 +274,27 @@ int main(int argc, char *argv[])
                 read_time_end = MPI_Wtime();
                 read_time = read_time_end - read_time_start;
 
-                // Verify
-                varified = 1;
-                for (j = 0; j < write_size; j++) 
-                    if (data[j] != 'a' + i) {
-                        printf("Error with read data.\n");
-                        varified = 0;
-                        break;
-                    }
+                /* // Verify */
+                /* varified = 1; */
+                /* for (j = 0; j < write_size; j++) */ 
+                /*     if (data[j] != 'a' + i) { */
+                /*         printf("Error with read data.\n"); */
+                /*         varified = 0; */
+                /*         break; */
+                /*     } */
 
-                if (varified == 1) 
-                    printf("Iter %d - Reader #%d: Successfully read data %.2f MB.\n", i, rank, count[0]/1048576.0);
-                fflush(stdout);
+                /* if (varified == 1) */ 
+                /*     printf("Iter %d - Reader #%d: Successfully read data %.2f MB.\n", i, rank, count[0]/1048576.0); */
+                /* fflush(stdout); */
                 
                 // Record the current dims for next read
                 dims[0] = new_dims[0];
 
             } // end if OK_TO_OPEN
 
+            printf("Iter %2d - Rank %d: comm time: %.4f, read  time: %.4f\n", 
+                    i, rank, iter_comm_time, read_time);
+            fflush(stdout);
         } // end for n_writes
 
     } // end else
@@ -293,12 +305,12 @@ int main(int argc, char *argv[])
     total_time = total_time_end - total_time_start;
 
     if (rank == 0) 
-        printf("Rank %d: Total time:%.2f, communication time:%.2f, write total time: %.2f\n", 
+        printf("Rank %d: Total time:%.4f, comm time: %.4f, write total time: %.4f\n", 
                 rank, total_time, comm_time, write_time);
     fflush(stdout);
     MPI_Barrier(MPI_COMM_WORLD);
     if (rank != 0) 
-        printf("Rank %d: Total time:%.2f, communication time:%.2f, read  total time: %.2f\n", 
+        printf("Rank %d: Total time:%.4f, comm time: %.4f, read  total time: %.4f\n", 
                 rank, total_time, comm_time, read_time);
 
 done:
