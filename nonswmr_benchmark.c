@@ -13,7 +13,7 @@
 #define FLUSH_COMING 2
 #define FILE_CLOSED  3
 #define FAILED       9
-#define FILENAME     "nonswmr_test.h5"
+#define FILENAME     "nonswmr_test"
 
 void print_usage(const char *exename)
 {
@@ -22,7 +22,7 @@ void print_usage(const char *exename)
 
 int main(int argc, char *argv[])
 {
-    int rank, size, i, j, varified;
+    int rank, size, i, j;
     int n_writes = 0;
     int send_msg = 0, recv_msg = 0;
     char *data;
@@ -44,18 +44,17 @@ int main(int argc, char *argv[])
 
     sprintf(filename, "./%s", FILENAME);
 
-    if (argc < 3) {
+    if (argc != 4) {
         print_usage(argv[0]);
         goto exit;
     }
-    else if (argc == 4) {
+    else {
+        write_size = (hsize_t)atol(argv[1]);
+        /* write_size *= 1048576; */
+        n_writes   = atoi(argv[2]);
         filepath   = argv[3];
-        sprintf(filename, "%s/%s", filepath, FILENAME);
+        sprintf(filename, "%s/%s_%lluB.h5", filepath, FILENAME, write_size);
     }
-
-    write_size = (hsize_t)atol(argv[1]);
-    /* write_size *= 1048576; */
-    n_writes   = atoi(argv[2]);
 
     dims[0]    = write_size;
     new_dims[0]= write_size;
@@ -76,10 +75,7 @@ int main(int argc, char *argv[])
         }
     }
 
-
-
     data       = (char*)malloc(write_size);
-
     gather_msg = (int*)malloc(size*sizeof(int));
 
     MPI_Barrier(MPI_COMM_WORLD);
@@ -275,7 +271,7 @@ int main(int argc, char *argv[])
                 read_time = read_time_end - read_time_start;
 
                 /* // Verify */
-                /* varified = 1; */
+                /* int varified = 1; */
                 /* for (j = 0; j < write_size; j++) */ 
                 /*     if (data[j] != 'a' + i) { */
                 /*         printf("Error with read data.\n"); */

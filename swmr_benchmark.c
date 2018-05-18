@@ -9,7 +9,7 @@
 
 #define NDIM 1
 
-#define FILENAME     "swmr_test.h5"
+#define FILENAME     "swmr_test"
 
 void print_usage(const char *exename)
 {
@@ -18,7 +18,7 @@ void print_usage(const char *exename)
 
 int main(int argc, char *argv[])
 {
-    int rank, size, i, j, varified, iter;
+    int rank, size, i;
     hsize_t amount_read, total_written;
     int n_writes = 0;
     char *data;
@@ -39,18 +39,18 @@ int main(int argc, char *argv[])
 
     sprintf(filename, "./%s", FILENAME);
 
-    if (argc < 3) {
+    if (argc != 4) {
         print_usage(argv[0]);
         goto exit;
     }
-    else if (argc == 4) {
+    else {
+        write_size = (hsize_t)atol(argv[1]);
+        /* write_size *= 1048576; */
+        n_writes   = atoi(argv[2]);
         filepath   = argv[3];
-        sprintf(filename, "%s/%s", filepath, FILENAME);
+        sprintf(filename, "%s/%s_%lluB.h5", filepath, FILENAME, write_size);
     }
 
-    write_size = (hsize_t)atol(argv[1]);
-    /* write_size *= 1048576; */
-    n_writes   = atoi(argv[2]);
     total_written = write_size * n_writes;
 
     dims[0]    = write_size;
@@ -164,8 +164,8 @@ int main(int argc, char *argv[])
             status = H5Fflush(file_id, H5F_SCOPE_GLOBAL);
 
             write_time_end = MPI_Wtime();
-            printf("Iter %2d       - Rank %d: write time: %.4f\n", i, rank, write_time_end - write_time_start);
-            fflush(stdout);
+            /* printf("Iter %2d       - Rank %d: write time: %.4f\n", i, rank, write_time_end - write_time_start); */
+            /* fflush(stdout); */
             write_time += write_time_end - write_time_start;
 
         } // end for n_writes
@@ -220,13 +220,13 @@ int main(int argc, char *argv[])
             status = H5Dread (dset_id, H5T_NATIVE_CHAR, dspace_id, fspace_id, H5P_DEFAULT, data);
             read_time_end = MPI_Wtime();
 
-            printf("Iter %2d to %2d - Rank %d: read  time: %.4f\n", 
-                        i, (int)(i+count[0]/write_size-1), rank, read_time_end - read_time_start);
-            fflush(stdout);
+            /* printf("Iter %2d to %2d - Rank %d: read  time: %.4f\n", */ 
+            /*             i, (int)(i+count[0]/write_size-1), rank, read_time_end - read_time_start); */
+            /* fflush(stdout); */
             read_time += read_time_end - read_time_start;
 
             amount_read += count[0];
-
+            /* int j, varified, iter; */
             /* // Verify */
             /* varified = 1; */
             /* iter = i; */
