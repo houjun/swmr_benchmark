@@ -288,9 +288,9 @@ int main(int argc, char *argv[])
 
             } // end if OK_TO_OPEN
 
-            printf("Iter %2d - Rank %d: comm time: %.4f, read  time: %.4f\n", 
-                    i, rank, iter_comm_time, read_time);
-            fflush(stdout);
+            /* printf("Iter %2d - Rank %d: comm time: %.4f, read  time: %.4f\n", */ 
+            /*         i, rank, iter_comm_time, read_time); */
+            /* fflush(stdout); */
         } // end for n_writes
 
     } // end else

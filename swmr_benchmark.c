@@ -130,8 +130,8 @@ int main(int argc, char *argv[])
         write_time_end = MPI_Wtime();
         write_time = write_time_end - write_time_start;
 
-        printf("Iter  0       - Rank %d: write time: %.4f\n", rank, write_time);
-        fflush(stdout);
+        /* printf("Iter  0       - Rank %d: write time: %.4f\n", rank, write_time); */
+        /* fflush(stdout); */
 
         MPI_Barrier(MPI_COMM_WORLD); /* A */
 
