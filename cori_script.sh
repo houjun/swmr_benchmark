@@ -17,8 +17,8 @@ REPEAT=3
 COUNT=12
 ROUND=10
 
-SWMR_EXE=/global/u1/h/houhun/hdf5_swmr/swmr_benchmark/swmr_benchmark.exe
-NONSWMR_EXE=/global/u1/h/houhun/hdf5_swmr/swmr_benchmark/nonswmr_benchmark.exe
+SWMR_EXE=./swmr_benchmark.exe
+NONSWMR_EXE=./nonswmr_benchmark.exe
 WRITE_LOC=/global/cscratch1/sd/houhun/swmr_benchmark_test_data
 
 export DELAY=0
